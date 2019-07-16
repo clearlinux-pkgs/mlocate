@@ -1,0 +1,150 @@
+From e1bd97e8152475c4dfe7c4a35ef734138479ba80 Mon Sep 17 00:00:00 2001
+From: Thiago Macieira <thiago.macieira@intel.com>
+Date: Tue, 16 Jul 2019 14:13:12 -0700
+Subject: [PATCH] Stateless: make updatedb find the configuration file in /usr
+
+If the file in /etc exists, it overrides completely the one in
+/usr/share/defaults/etc, as the config parser is not able to override,
+only add to the known settings.
+
+Signed-off-by: Thiago Macieira <thiago.macieira@intel.com>
+---
+ doc/updatedb.8.in |  6 ++++++
+ src/conf.c        | 27 +++++++++++++++++----------
+ tests/config.at   |  1 +
+ 3 files changed, 24 insertions(+), 10 deletions(-)
+
+diff --git a/doc/updatedb.8.in b/doc/updatedb.8.in
+index d0cf524..5f1bcc1 100644
+--- a/doc/updatedb.8.in
++++ b/doc/updatedb.8.in
+@@ -174,6 +174,12 @@ can get the complete list of files in the subtree of \fIsource_directory\fR.
+ \fB@updatedb_conf@\fR
+ A configuration file.  See
+ .BR updatedb.conf (5).
++If this file is present, the one in /usr/share/defaults is not read.
++
++.TP
++\fB/usr/share/defaults/@updatedb_conf@\fR
++The fallback configuration file, if @updatedb_conf@ is not present. See
++.BR updatedb.conf (5).
+ 
+ .TP
+ \fB@dbfile@\fR
+diff --git a/src/conf.c b/src/conf.c
+index 8ee6d34..e88e9b8 100644
+--- a/src/conf.c
++++ b/src/conf.c
+@@ -298,15 +298,21 @@ uc_lex (void)
+ static void
+ parse_updatedb_conf (void)
+ {
++  const char *filename = UPDATEDB_CONF;
+   int old_error_one_per_line;
+   unsigned old_error_message_count;
+   bool had_prune_bind_mounts, had_prunefs, had_prunenames, had_prunepaths;
+ 
+-  uc_file = fopen (UPDATEDB_CONF, "r");
++  uc_file = fopen (filename, "r");
++  if (uc_file == NULL && errno == ENOENT)
++    {
++      filename = "/usr/share/defaults" UPDATEDB_CONF;
++      uc_file = fopen (filename, "r");
++    }
+   if (uc_file == NULL)
+     {
+       if (errno != ENOENT)
+-	error (EXIT_FAILURE, errno, _("can not open `%s'"), UPDATEDB_CONF);
++	error (EXIT_FAILURE, errno, _("can not open `%s'"), filename);
+       goto err;
+     }
+   flockfile (uc_file);
+@@ -349,18 +355,18 @@ parse_updatedb_conf (void)
+ 	  break;
+ 
+ 	case UCT_IDENTIFIER:
+-	  error_at_line (0, 0, UPDATEDB_CONF, uc_line,
++	  error_at_line (0, 0, filename, uc_line,
+ 			 _("unknown variable `%s'"), uc_lex_buf);
+ 	  goto skip_to_eol;
+ 
+ 	default:
+-	  error_at_line (0, 0, UPDATEDB_CONF, uc_line,
++	  error_at_line (0, 0, filename, uc_line,
+ 			 _("variable name expected"));
+ 	  goto skip_to_eol;
+ 	}
+       if (*had_var != false)
+ 	{
+-	  error_at_line (0, 0, UPDATEDB_CONF, uc_line,
++	  error_at_line (0, 0, filename, uc_line,
+ 			 _("variable `%s' was already defined"), uc_lex_buf);
+ 	  goto skip_to_eol;
+ 	}
+@@ -369,14 +375,14 @@ parse_updatedb_conf (void)
+       token = uc_lex ();
+       if (token != UCT_EQUAL)
+ 	{
+-	  error_at_line (0, 0, UPDATEDB_CONF, uc_line,
++	  error_at_line (0, 0, filename, uc_line,
+ 			 _("`=' expected after variable name"));
+ 	  goto skip_to_eol;
+ 	}
+       token = uc_lex ();
+       if (token != UCT_QUOTED)
+ 	{
+-	  error_at_line (0, 0, UPDATEDB_CONF, uc_line,
++	  error_at_line (0, 0, filename, uc_line,
+ 			 _("value in quotes expected after `='"));
+ 	  goto skip_to_eol;
+ 	}
+@@ -384,7 +390,7 @@ parse_updatedb_conf (void)
+ 	{
+ 	  if (parse_bool (&conf_prune_bind_mounts, uc_lex_buf) != 0)
+ 	    {
+-	      error_at_line (0, 0, UPDATEDB_CONF, uc_line,
++	      error_at_line (0, 0, filename, uc_line,
+ 			     _("invalid value `%s' of PRUNE_BIND_MOUNTS"),
+ 			     uc_lex_buf);
+ 	      goto skip_to_eol;
+@@ -401,7 +407,7 @@ parse_updatedb_conf (void)
+       token = uc_lex ();
+       if (token != UCT_EOL && token != UCT_EOF)
+ 	{
+-	  error_at_line (0, 0, UPDATEDB_CONF, uc_line,
++	  error_at_line (0, 0, filename, uc_line,
+ 			 _("unexpected data after variable value"));
+ 	  goto skip_to_eol;
+ 	}
+@@ -416,7 +422,7 @@ parse_updatedb_conf (void)
+     }
+  eof:
+   if (ferror (uc_file))
+-    error (EXIT_FAILURE, 0, _("I/O error reading `%s'"), UPDATEDB_CONF);
++    error (EXIT_FAILURE, 0, _("I/O error reading `%s'"), filename);
+   error_one_per_line = old_error_one_per_line;
+   free (uc_lex_buf);
+   uc_lex_buf_size = 0;
+@@ -461,6 +467,7 @@ help (void)
+ 	    "\n"
+ 	    "The configuration defaults to values read from\n"
+ 	    "`%s'.\n"), DBFILE, UPDATEDB_CONF);
++  printf ("`/usr/share/defaults%s'.\n", UPDATEDB_CONF);
+   printf (_("\n"
+ 	    "Report bugs to %s.\n"), PACKAGE_BUGREPORT);
+ }
+diff --git a/tests/config.at b/tests/config.at
+index fd671bc..b7a4e84 100644
+--- a/tests/config.at
++++ b/tests/config.at
+@@ -74,6 +74,7 @@ Update a mlocate database.
+ 
+ The configuration defaults to values read from
+ `PATH'.
++`PATH'.
+ 
+ Report bugs to mitr@redhat.com.
+ ]])
+-- 
+2.22.0
+

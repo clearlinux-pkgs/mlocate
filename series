@@ -1,0 +1,4 @@
+0001-Add-a-default-updatedb.conf-file.patch
+0002-Stateless-make-updatedb-find-the-configuration-file-.patch
+0003-Make-updatedb-create-the-DB-dir.patch
+0004-Make-locate-suggest-running-updatedb-if-the-DB-isn-t.patch

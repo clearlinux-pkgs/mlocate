@@ -1,0 +1,5 @@
+install -d %{buildroot}/usr/share/defaults/etc
+install -m644 -t %{buildroot}/usr/share/defaults/etc updatedb.conf
+
+mkdir -p %{buildroot}/usr/lib/systemd/system/timers.target.wants
+ln -s ../mlocate-updatedb.timer %{buildroot}/usr/lib/systemd/system/timers.target.wants
