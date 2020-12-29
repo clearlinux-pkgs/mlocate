@@ -116,7 +116,7 @@ export CFLAGS="$CFLAGS -O3 -ffat-lto-objects -flto=4 "
 export FCFLAGS="$FFLAGS -O3 -ffat-lto-objects -flto=4 "
 export FFLAGS="$FFLAGS -O3 -ffat-lto-objects -flto=4 "
 export CXXFLAGS="$CXXFLAGS -O3 -ffat-lto-objects -flto=4 "
-%reconfigure --disable-static --localstatedir=/var/lib
+%reconfigure --localstatedir=/var/lib
 make  %{?_smp_mflags}
 
 %check
